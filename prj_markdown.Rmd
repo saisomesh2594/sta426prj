@@ -1,0 +1,64 @@
+---
+title: "prjsta426"
+author: "hwartmann"
+date: "November 30, 2016"
+output: html_document
+---
+```{r "setup", include=FALSE}
+knitr::opts_knit$set(root.dir = "/home/hannes/Dropbox/ETH/sta426/prj")  # with something else than `getwd()`
+```
+##Introduction
+Single cell measurements have a clear advantage over whole population measurements. In whole population measurements we measure the average value of a parameter over the total population in our sample. To answer questions that involve the study of specific subpopulation of cells this is not very helpful. With single cell measurements we are able to get values for each cell separately. Given single cell data from a sample we should be able to stratify the cells into its subpopulation and make some prediction towards a disease state, for example. 
+The most common method to obtain single cell measurements is flow cytometry. For a long time fluorescent flow cytometry was very popular. With this method, in addition to physical properties such as shape, one can also measure the abundance of fluorescent markers within a cell. This technique limited by the spectral overlap, i.e. the overlap of the wavelength of the differently colored fluorescent used. This makes it very hard to distinguish a large number of parameters. In resent time flow cytometry has been coupled with mass spectrometry to allow the measurements of >40 inter and outer cellular parameters at the same time. Very briefly, in this method samples are incubated with antibodies carrying rare metals and are then vaporized in a time of flight mass spectrometer. The mass of the rare metals and their abundance is measured and replaced the fluorescent measurement of fluorescent flow cytometry.
+Bruggner et al. have proposed a new automated method to deted stratifying signatures in cellular subpopulations. They named their method citrus and it's available as an R package. 
+##Data
+##reading and combining of data
+```{r }
+library(citrus)
+dataDirectory = "./data"
+outputdir = "./output"
+files = c("PBMC8_30min_patient1_BCR-XL.fcs","PBMC8_30min_patient1_Reference.fcs","PBMC8_30min_patient2_BCR-XL.fcs","PBMC8_30min_patient2_Reference.fcs","PBMC8_30min_patient3_BCR-XL.fcs","PBMC8_30min_patient3_Reference.fcs","PBMC8_30min_patient4_BCR-XL.fcs","PBMC8_30min_patient4_Reference.fcs","PBMC8_30min_patient5_BCR-XL.fcs","PBMC8_30min_patient5_Reference.fcs","PBMC8_30min_patient6_BCR-XL.fcs","PBMC8_30min_patient6_Reference.fcs","PBMC8_30min_patient7_BCR-XL.fcs","PBMC8_30min_patient7_Reference.fcs","PBMC8_30min_patient8_BCR-XL.fcs","PBMC8_30min_patient8_Reference.fcs")
+
+eventcount = vector(mode="integer", length=16)
+i = 1
+for(f in files){
+  fcsfile = citrus.readFCS(file.path(dataDirectory,f))
+  eventcount[i] = dim(fcsfile)[1]
+  i = i +1
+}
+barplot(eventcount,main="Event distribution", 
+  names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
+
+
+fileList = data.frame(reference=list.files(dataDirectory,pattern="Reference"),bcr=list.files(dataDirectory,pattern="BCR-XL"))
+
+citrus.combinedFCSSet = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+
+```
+```{r}
+clusteringColumns = c("CD3(110:114)Dd","CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd")
+citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns)
+
+largeEnoughClusters = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05)
+
+hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters)
+
+clusterMedians = t(sapply(largeEnoughClusters,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
+rownames(clusterMedians) = largeEnoughClusters
+colnames(clusterMedians) = clusteringColumns
+
+citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
+```
+```{r}
+```
+```{r}
+```
+```{r}
+```
+```{r}
+```
+```{r}
+```
+```{r}
+```
+
