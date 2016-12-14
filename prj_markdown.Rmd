@@ -14,11 +14,9 @@ Bruggner et al. have proposed a new automated method to detect stratifying signa
 Here in this project work we set out to explain the workings of citrus in more detail while following the same real world example that is used in the original paper. 
 ##Data
 Bodenmiller et al. created a data set with a newly proposed mass-tag cellular barcoding (MCB) method. This method allows for very high dimensional data aquired with mass cytometry. More specifically they set out to measure signaling dynamics and cell-to-cell communication in peripheral blood mononuclear cells (PBMC). To this end 12 different experimentel conditions were set up and 14 signaling nodes and 10 cell-surface markers were measured at different time points from 0-4h. Here we focus on one of those conditions naimly the coss-linking of the B-cell receptor (BCR)/Fc receptor (FcR). The data consist of 16 samples of eight healthy donors, one reference and one treated sample per patient.
-##reading and combining of data
 ```{r }
 library(citrus)
 dataDirectory = "./data"
-outputdir = "./output"
 files = c("PBMC8_30min_patient1_BCR-XL.fcs","PBMC8_30min_patient1_Reference.fcs","PBMC8_30min_patient2_BCR-XL.fcs","PBMC8_30min_patient2_Reference.fcs","PBMC8_30min_patient3_BCR-XL.fcs","PBMC8_30min_patient3_Reference.fcs","PBMC8_30min_patient4_BCR-XL.fcs","PBMC8_30min_patient4_Reference.fcs","PBMC8_30min_patient5_BCR-XL.fcs","PBMC8_30min_patient5_Reference.fcs","PBMC8_30min_patient6_BCR-XL.fcs","PBMC8_30min_patient6_Reference.fcs","PBMC8_30min_patient7_BCR-XL.fcs","PBMC8_30min_patient7_Reference.fcs","PBMC8_30min_patient8_BCR-XL.fcs","PBMC8_30min_patient8_Reference.fcs")
 
 eventcount = vector(mode="integer", length=16)
@@ -30,28 +28,61 @@ for(f in files){
 }
 barplot(eventcount,main="Event distribution", 
   names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
-
-
-fileList = data.frame(reference=list.files(dataDirectory,pattern="Reference"),bcr=list.files(dataDirectory,pattern="BCR-XL"))
+```
+##reading and combining of data
+```{r }
+fileList = data.frame(bcr=list.files(dataDirectory,pattern="BCR"),reference=list.files(dataDirectory,pattern="Reference"))
 
 citrus.combinedFCSSet = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
 
 ```
+##Clustering of data by extracellular markers
 ```{r}
-clusteringColumns = c("CD3(110:114)Dd","CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd")
-citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns)
+clusteringColumns = c("CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd","CD3(110:114)Dd")
 
-largeEnoughClusters = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05)
+#citrus.clustering uses Rclusterpp.hclust()
+citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns,clusteringType = "hierarchical")
 
-hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters)
+labels = factor(rep(c("bcr","ref"),each=8))
+
+citrus.clustering = citrus.clusterAndMapFolds(citrus.combinedFCSSet,clusteringColumns,labels,nFolds=4)
+
+#citrus.plotClusters(clusterIds=c(19998,19997),clusterAssignments=citrus.clustering$clusterMembership,citrus.combinedFCSSet,clusteringColumns)
+length(citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05))
+
+largeEnoughClusters1 = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.01)
+largeEnoughClusters5 = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05)
+
+hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
 
 clusterMedians = t(sapply(largeEnoughClusters,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
+
 rownames(clusterMedians) = largeEnoughClusters
 colnames(clusterMedians) = clusteringColumns
 
 citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
 ```
+##features
 ```{r}
+# Vector of parameters to calculate medians for
+functionalColumns = c("pNFkB(Nd142)Dd", "pp38(Nd144)Dd", "pStat5(Nd150)Dd", "pAkt(Sm152)Dd", "pStat1(Eu153)Dd", "pSHP2(Sm154)Dd", "pZap70(Gd156)Dd", "pStat3(Gd158)Dd", "pSlp76(Dy164)Dd", "pBtk(Er166)Dd", "pPlcg2(Er167)Dd", "pErk(Er168)Dd","pLat(Er170)Dd", "pS6(Yb172)Dd")
+
+# Build features
+abundanceFeatures = citrus.calculateFeatures(citrus.combinedFCSSet, clusterAssignments=citrus.clustering$clusterMembership,clusterIds=largeEnoughClusters5)
+
+medianDifferenceFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
+                                                clusterAssignments=citrus.clustering$clusterMembership,
+                                                clusterIds=largeEnoughClusters5,
+                                                featureType="medians",
+                                                medianColumns=functionalColumns,
+                                                conditions=c("reference","bcr"))
+medianFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
+                                                clusterAssignments=citrus.clustering$clusterMembership,
+                                                clusterIds=largeEnoughClusters5,
+                                                featureType="medians",
+                                                medianColumns=functionalColumns
+                                                )
+
 ```
 ```{r}
 ```
