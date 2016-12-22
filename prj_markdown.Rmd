@@ -6,6 +6,12 @@ output: html_document
 ---
 ```{r "setup", include=FALSE}
 knitr::opts_knit$set(root.dir = "/home/hannes/Dropbox/ETH/sta426/prj")  # with something else than `getwd()`
+library(captioner)
+library(citrus)
+library(knitr)
+figs <- captioner(prefix="Figure")
+figs(name="eventcount_files","Total number of events per file")
+
 ```
 ##Introduction
 Single cell measurements have a clear advantage over whole population measurements. In whole population measurements we measure the average value of a parameter over the total population in our sample. To answer questions that involve the study of specific subpopulation of cells this is not very helpful. With single cell measurements we are able to get values for each cell separately. Given single cell data from a sample we should be able to stratify the cells into its subpopulation and make some prediction towards a disease state, for example. 
@@ -14,14 +20,19 @@ Bruggner et al. have proposed a new automated method to detect stratifying signa
 Here in this project work we set out to explain the workings of citrus in more detail while following the same real world example that is used in the original paper. 
 ##Data
 Bodenmiller et al. created a data set with a newly proposed mass-tag cellular barcoding (MCB) method. This method allows for very high dimensional data acquired with mass cytometry. More specifically they set out to measure signaling dynamics and cell-to-cell communication in peripheral blood mononuclear cells (PBMC). To this end 12 different experimental conditions were set up and 14 signaling nodes and 10 cell-surface markers were measured at different time points from 0-4h. Here we focus on one of those conditions mainly the cross-linking of the B-cell receptor (BCR)/Fc receptor (FcR). The data consist of 16 samples of eight healthy donors, one reference and one treated sample per patient.
-##Data sampling
-For each patient there is a different number of events in the FCS files. As figure XX shows the number of events ranges from about 3000 in patient 1 to about 17'000 in patient 2. To prevent over representation of any one sample and to reduce computation time Citrus samples a user specified number of events per patient and then merges the data. As we'll see later,  
-
-is sampling representative? is mean(all) == mean(sample)? -> plot
 ```{r }
-library(citrus)
+
 dataDirectory = "./data"
 files = c("PBMC8_30min_patient1_BCR-XL.fcs","PBMC8_30min_patient1_Reference.fcs","PBMC8_30min_patient2_BCR-XL.fcs","PBMC8_30min_patient2_Reference.fcs","PBMC8_30min_patient3_BCR-XL.fcs","PBMC8_30min_patient3_Reference.fcs","PBMC8_30min_patient4_BCR-XL.fcs","PBMC8_30min_patient4_Reference.fcs","PBMC8_30min_patient5_BCR-XL.fcs","PBMC8_30min_patient5_Reference.fcs","PBMC8_30min_patient6_BCR-XL.fcs","PBMC8_30min_patient6_Reference.fcs","PBMC8_30min_patient7_BCR-XL.fcs","PBMC8_30min_patient7_Reference.fcs","PBMC8_30min_patient8_BCR-XL.fcs","PBMC8_30min_patient8_Reference.fcs")
+fileList = data.frame(bcr=list.files(dataDirectory,pattern="BCR"),reference=list.files(dataDirectory,pattern="Reference"))
+
+```
+##Data sampling
+For each patient there is a different number of events in the FCS files. As figure XX shows the number of events ranges from about 3000 in patient 1 to about 17'000 in patient 2. To prevent over representation of any one sample and to reduce computation time Citrus samples a user specified number of events per patient and then merges the data for clustering. The function sample() from the R base package is used to select 5000 random data points from the FCS files, if available. As we have tried to reproduce the exact data obtained bei Bruggner et al we found that this is not possible. We suspect this to be the result of downsampling the date. To get an idea how different the subsamples really are we decided to subsample 5000 data points for each data file 1000 times and calculate the mean and variance of the mean of the intensity of the markers.
+
+
+```{r }
+
 
 eventcount = vector(mode="integer", length=16)
 i = 1
@@ -33,43 +44,48 @@ for(f in files){
 barplot(eventcount,main="Event distribution", 
   names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
 
+figs("eventcount_files",display="cite")
 
+data_analysis = matrix(data=NA, nrow=16, ncol=10)
+colnames(data_analysis) = c("CD3","CD45","CD4","CD20","CD33","CD123","CD14","igM","HLA-DR","CD7")
+rownames(data_analysis) = c("p1 BCR-XL","p1 Ref","p2 BCR-XL","p2 Ref","p3 BCR-XL","p3 Ref","p4 BCR-XL","p4 Ref","p5 BCR-XL","p5 Ref","p6 BCR-XL","p6 Ref","p7 BCR-XL","p7 Ref","p8 BCR-XL","p8 Ref")
 
+marker = c(3, 4, 9, 11, 12, 14, 21, 29, 31, 33)
 
-avgintensity = matrix(data=NA, nrow=10, ncol=1000)
+avgintensity = matrix(data=NA, nrow=1000, ncol=10)
 
-#fcsfile = citrus.readFCS(file.path(dataDirectory,paste0("PBMC8_30min_patient",j,"_BCR-XL.fcs")))
-h = 1
-
-for(j in c(3, 4, 9, 11, 12, 14, 21, 29, 31, 33)){#cd3,cd45,cd4,cd20,cd33,cd14,cd14,igm,hla,cd7<
-  fcsfile = citrus.readFCS(file.path(dataDirectory,"PBMC8_30min_patient2_BCR-XL.fcs"))
-
-  for( i in 1:1000){
-    #is it taking the first 1000?
-    #
-    sample_fcsfile = fcsfile[sort(sample(1:nrow(fcsfile),5000)),] #1:numberofrowsin(fcsfile)
-    avgintensity[h,i] = mean(sample_fcsfile@exprs[,j])
-    
-    #cat(mean(sample_fcsfile@exprs[,11]),"\t")
-  }
-  h = h +1
+#loop all patients
+k = 1
+for(j in 1:8){
+  #loop all bcr / ref, load files
+    for(each in c("_BCR-XL.fcs","_Reference.fcs")){
+      fcsfile = citrus.readFCS(file.path(dataDirectory,paste0("PBMC8_30min_patient",j,each)))
+      #subsamples 1000 times
+      for(i in 1:1000){
+        #if not patient 1, sample 5k, p1 has only ca. 3k samples
+        if(j != 1){
+          sample_fcsfile = fcsfile[sort(sample(1:nrow(fcsfile),5000)),] #1:numberofrowsin(fcsfile)
+        }else{
+          sample_fcsfile = fcsfile #1:numberofrowsin(fcsfile)
+        }
+        #loop each marker andstore mean
+        for(h in 1:10)
+          #avgintensity is 1000x10 i.e. 1000 subsamples with each 10 means for 10 markers
+          avgintensity[i,h] = mean(sample_fcsfile@exprs[,marker[h]])
+      }
+      for(p in 1:10){
+       data_analysis[k,p] = paste0(signif(mean(avgintensity[,p]), digits = 2),"±",signif(var(avgintensity[,p]), digits = 2))
+      }
+       k = k +1
+      
+    }
 }
 
 
-plot(density(avgintensity[1,]), main="")
+kable(data_analysis)
 
 ```
-```{r }
-```
-##reading and combining of data
-```{r }
-fileList = data.frame(bcr=list.files(dataDirectory,pattern="BCR"),reference=list.files(dataDirectory,pattern="Reference"))
 
-citrus.combinedFCSSet = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
-
-#plot density of 1k times 5k sampling for marker intensity -> so how different they are, look at possible range, maybe it's a explenation for the different clusters?
-
-```
 ##Clustering of data by extracellular markers
 One popular method for unsupervised learning is clustering. In clustering one can apply different algorithms to detect structure within a given data set and can build features based on cluster membership. Citrus uses Rclusterpp.hclust() also created by Bruggner et al. This function is an implementation of the Agglomerative Hierarchical Clustering algorithm. In hierarchical clustering smaller clusters are merged into larger clusters following a given distance function and linkage method. In Citrus the distance between markers is specified by the Euclidean distance and Wards linkage used as the agglomerative method. Wards methods minimizes the total within cluster variance.  
 The Bodenmiller data is clustered by the intensity of the extracellular markers CD45,CD4,CD20,CD33,CD123,CD14,IgM,HLA-DR,CD7 and CD3. 
@@ -87,6 +103,84 @@ plot: top features like in Fig2B of paper
 plot: corss val of model with threshold selection Fig
 plot: hierarchy plot of 
 
+###Compare clustering with different subsamples
+```{r}
+citrus.combinedFCSSet_1 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+citrus.clustering_1 = citrus.cluster(citrus.combinedFCSSet_1,clusteringColumns,clusteringType = "hierarchical")
+citrus.combinedFCSSet_2 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+citrus.clustering_2 = citrus.cluster(citrus.combinedFCSSet_2,clusteringColumns,clusteringType = "hierarchical")
+citrus.combinedFCSSet_3 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+citrus.clustering_3 = citrus.cluster(citrus.combinedFCSSet_3,clusteringColumns,clusteringType = "hierarchical")
+citrus.combinedFCSSet_4 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+citrus.clustering_4 = citrus.cluster(citrus.combinedFCSSet_4,clusteringColumns,clusteringType = "hierarchical")
+citrus.combinedFCSSet_5 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
+citrus.clustering_5 = citrus.cluster(citrus.combinedFCSSet_5,clusteringColumns,clusteringType = "hierarchical")
+
+#make a list of the clusterings to loop though them
+subsamples = list(citrus.combinedFCSSet_1,citrus.combinedFCSSet_2,citrus.combinedFCSSet_3,citrus.combinedFCSSet_4,citrus.combinedFCSSet_5)
+clusterings = list(citrus.clustering_1,citrus.clustering_2,citrus.clustering_3,citrus.clustering_4,citrus.clustering_5)
+
+total_count_1 = vector(mode ="integer", length=16)
+total_count_2 = vector(mode ="integer", length=16)
+total_count_3 = vector(mode ="integer", length=16)
+total_count_4 = vector(mode ="integer", length=16)
+total_count_5 = vector(mode ="integer", length=16)
+
+total_patient_count = list(total_count_1,total_count_2,total_count_3,total_count_4,total_count_5)
+
+outermostclusters_1 = c()
+outermostclusters_2 = c()
+outermostclusters_3 = c()
+outermostclusters_4 = c()
+outermostclusters_5 = c()
+
+outermostcluster_list = list(outermostclusters_1,outermostclusters_2,outermostclusters_3,outermostclusters_4,outermostclusters_5)
+
+#for each clustering 1:5
+i = 1
+for(each_c in clusterings){
+  #find the clusters containing at leat 5% of the total data
+  largeenoughclusters_a =citrus.selectClusters.minimumClusterSize(each_c,minimumClusterSizePercent=0.05)
+  #find bottom clusters
+  for(each_subc in largeenoughclusters_a){
+    decendants = citrus.getClusterDecendants(each_subc,each_c$clustering$merge)
+    decendantsinLEC = decendants %in% largeenoughclusters_a
+    if(length()){
+      outermostcluster_list[[i]] = c(outermostcluster_list[[i]],each_subc)
+    }
+  }
+  i = i +1
+}
+  
+for(j in 1:5){
+    #for each of the bottom clusters per clustering
+  for(each_subc in outermostcluster_list[[j]]){
+      #find the events contained in the bottom clusters
+      eventsincluster = each_c$clusterMembership[[each_subc]]
+  }
+   #for each event per cluster, look up its patient id and increment the counter
+   for(each_event in eventsincluster){
+     total_patient_count[[j]][subsamples[[1]]$data[each_event,37]] = total_patient_count[[j]][subsamples[[1]]$data[each_event,37]] +1
+   }
+}
+    
+
+
+
+
+#some plots
+
+
+#reduced_counts = Reduce("+",total_patient_count)
+treated_count = sum(reduced_counts[1:8])
+healthy_count = sum(reduced_counts[9:16])
+
+
+#healthy vs. sick
+barplot(,main="Event distribution", 
+  names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
+
+```
 
 ###Hierarchygraph
 
@@ -147,7 +241,6 @@ colnames(clusterMedians) = clusteringColumns
 citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
 
 ##plot featurs highlated in hierarchygraph
-library("limma")
 
 #get ps6 values coupled withh fileID
 ps6dataperevent = citrus.combinedFCSSet$data[,c(30,37)]
