@@ -10,10 +10,14 @@ knitr::opts_knit$set(root.dir = "/home/hannes/Dropbox/ETH/sta426/prj")  # with s
 ##Introduction
 Single cell measurements have a clear advantage over whole population measurements. In whole population measurements we measure the average value of a parameter over the total population in our sample. To answer questions that involve the study of specific subpopulation of cells this is not very helpful. With single cell measurements we are able to get values for each cell separately. Given single cell data from a sample we should be able to stratify the cells into its subpopulation and make some prediction towards a disease state, for example. 
 The most common method to obtain single cell measurements is flow cytometry. For a long time fluorescent flow cytometry was very popular. With this method, in addition to physical properties such as shape, one can also measure the abundance of fluorescent markers within a cell. This technique limited by the spectral overlap, i.e. the overlap of the wavelength of the differently colored fluorescent used. This makes it very hard to distinguish a large number of parameters. In resent time flow cytometry has been coupled with mass spectrometry to allow the measurements of >40 inter and outer cellular parameters at the same time. Very briefly, in this method samples are incubated with antibodies carrying rare metals and are then vaporized in a time of flight mass spectrometer. The mass of the rare metals and their abundance is measured and replaced the fluorescent measurement of fluorescent flow cytometry.
-Bruggner et al. have proposed a new automated method to detect stratifying signatures in cellular subpopulations. They named their method citrus and it's available as an R package. Citrus combines unsubervised and subervised learning to select end-point i.e. classification significan features. First a predefined number of samples is randomly selected from each patient and the data is combined. This data is then clustered using hierarchical clustering. From these clusters citrus tryied to extract relevant per-sample features. These features, together with the known end-point status i.e. healthy or diseased are used to train a regularized regression model.
+Bruggner et al. have proposed a new automated method to detect stratifying signatures in cellular sub populations. They named their method citrus and it's available as an R package. Citrus combines unsupervised and supervised learning to select end-point i.e. classification significant features. First a predefined number of samples is randomly selected from each patient and the data is combined. This data is then clustered using hierarchical clustering. From these clusters citrus tried to extract relevant per-sample features. These features, together with the known end-point status i.e. healthy or diseased are used to train a regularized regression model.
 Here in this project work we set out to explain the workings of citrus in more detail while following the same real world example that is used in the original paper. 
 ##Data
-Bodenmiller et al. created a data set with a newly proposed mass-tag cellular barcoding (MCB) method. This method allows for very high dimensional data aquired with mass cytometry. More specifically they set out to measure signaling dynamics and cell-to-cell communication in peripheral blood mononuclear cells (PBMC). To this end 12 different experimentel conditions were set up and 14 signaling nodes and 10 cell-surface markers were measured at different time points from 0-4h. Here we focus on one of those conditions naimly the coss-linking of the B-cell receptor (BCR)/Fc receptor (FcR). The data consist of 16 samples of eight healthy donors, one reference and one treated sample per patient.
+Bodenmiller et al. created a data set with a newly proposed mass-tag cellular barcoding (MCB) method. This method allows for very high dimensional data acquired with mass cytometry. More specifically they set out to measure signaling dynamics and cell-to-cell communication in peripheral blood mononuclear cells (PBMC). To this end 12 different experimental conditions were set up and 14 signaling nodes and 10 cell-surface markers were measured at different time points from 0-4h. Here we focus on one of those conditions mainly the cross-linking of the B-cell receptor (BCR)/Fc receptor (FcR). The data consist of 16 samples of eight healthy donors, one reference and one treated sample per patient.
+##Data sampling
+For each patient there is a different number of events in the FCS files. As figure XX shows the number of events ranges from about 3000 in patient 1 to about 17'000 in patient 2. To prevent over representation of any one sample and to reduce computation time Citrus samples a user specified number of events per patient and then merges the data. As we'll see later,  
+
+is sampling representative? is mean(all) == mean(sample)? -> plot
 ```{r }
 library(citrus)
 dataDirectory = "./data"
@@ -28,6 +32,34 @@ for(f in files){
 }
 barplot(eventcount,main="Event distribution", 
   names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
+
+
+
+
+avgintensity = matrix(data=NA, nrow=10, ncol=1000)
+
+#fcsfile = citrus.readFCS(file.path(dataDirectory,paste0("PBMC8_30min_patient",j,"_BCR-XL.fcs")))
+h = 1
+
+for(j in c(3, 4, 9, 11, 12, 14, 21, 29, 31, 33)){#cd3,cd45,cd4,cd20,cd33,cd14,cd14,igm,hla,cd7<
+  fcsfile = citrus.readFCS(file.path(dataDirectory,"PBMC8_30min_patient2_BCR-XL.fcs"))
+
+  for( i in 1:1000){
+    #is it taking the first 1000?
+    #
+    sample_fcsfile = fcsfile[sort(sample(1:nrow(fcsfile),5000)),] #1:numberofrowsin(fcsfile)
+    avgintensity[h,i] = mean(sample_fcsfile@exprs[,j])
+    
+    #cat(mean(sample_fcsfile@exprs[,11]),"\t")
+  }
+  h = h +1
+}
+
+
+plot(density(avgintensity[1,]), main="")
+
+```
+```{r }
 ```
 ##reading and combining of data
 ```{r }
@@ -35,32 +67,49 @@ fileList = data.frame(bcr=list.files(dataDirectory,pattern="BCR"),reference=list
 
 citrus.combinedFCSSet = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
 
+#plot density of 1k times 5k sampling for marker intensity -> so how different they are, look at possible range, maybe it's a explenation for the different clusters?
+
 ```
 ##Clustering of data by extracellular markers
+One popular method for unsupervised learning is clustering. In clustering one can apply different algorithms to detect structure within a given data set and can build features based on cluster membership. Citrus uses Rclusterpp.hclust() also created by Bruggner et al. This function is an implementation of the Agglomerative Hierarchical Clustering algorithm. In hierarchical clustering smaller clusters are merged into larger clusters following a given distance function and linkage method. In Citrus the distance between markers is specified by the Euclidean distance and Wards linkage used as the agglomerative method. Wards methods minimizes the total within cluster variance.  
+The Bodenmiller data is clustered by the intensity of the extracellular markers CD45,CD4,CD20,CD33,CD123,CD14,IgM,HLA-DR,CD7 and CD3. 
+
+
+add some scatter plots of markers from our most significant cluster
+
+
+
+do clustering
+generate feature
+evaluate feature with model
+select top feature / top most significan cluster
+plot: top features like in Fig2B of paper
+plot: corss val of model with threshold selection Fig
+plot: hierarchy plot of 
+
+
+###Hierarchygraph
+
+```{r}
+
+```
+
 ```{r}
 clusteringColumns = c("CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd","CD3(110:114)Dd")
 
 #citrus.clustering uses Rclusterpp.hclust()
 citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns,clusteringType = "hierarchical")
 
-labels = factor(rep(c("bcr","ref"),each=8))
+#labels = factor(rep(c("bcr","ref"),each=8))
 
-citrus.clustering = citrus.clusterAndMapFolds(citrus.combinedFCSSet,clusteringColumns,labels,nFolds=4)
+#citrus.clustering = citrus.clusterAndMapFolds(citrus.combinedFCSSet,clusteringColumns,labels,nFolds=4)
 
 #citrus.plotClusters(clusterIds=c(19998,19997),clusterAssignments=citrus.clustering$clusterMembership,citrus.combinedFCSSet,clusteringColumns)
 length(citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05))
 
-largeEnoughClusters1 = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.01)
-largeEnoughClusters5 = citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05)
 
-hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
 
-clusterMedians = t(sapply(largeEnoughClusters,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
 
-rownames(clusterMedians) = largeEnoughClusters
-colnames(clusterMedians) = clusteringColumns
-
-citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
 ```
 ##features
 ```{r}
@@ -84,7 +133,85 @@ medianFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
                                                 )
 
 ```
+##Plotting hierarchycal Graphs + differential features
 ```{r}
+largeEnoughClusters1= citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.01)
+
+hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
+
+clusterMedians = t(sapply(largeEnoughClusters1,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
+
+rownames(clusterMedians) = largeEnoughClusters1
+colnames(clusterMedians) = clusteringColumns
+
+citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
+
+##plot featurs highlated in hierarchygraph
+library("limma")
+
+#get ps6 values coupled withh fileID
+ps6dataperevent = citrus.combinedFCSSet$data[,c(30,37)]
+#replace fileID with endpoint label ref = 0, bcr = 1
+bcr = c(1,2,3,4,5,6,7,8)
+ref = c(9,10,11,12,13,14,15,16,17,18)
+
+for(i in 1:dim(ps6dataperevent)[1]){
+  if(ps6dataperevent[i,2] %in% bcr){
+    ps6dataperevent[i,2] = 1
+  }else{
+    ps6dataperevent[i,2] = 0
+  }
+}
+
+datafordiff = vector(mode = "list", length = length(largeEnoughClusters1))
+
+#loop though each cluster and select all events in that cluster
+j = 1
+
+#citrus.cluster$clustermembership is cluster X events NOT events X cluster
+
+for(eachcluster in largeEnoughClusters1){
+  print(citrus.clustering$clusterMembership[[eachcluster]])
+  j = j +1
+}
+
+
+
+# for(eachcluster in largeEnoughClusters1){
+#   print(j) 
+#   eventlist = 0
+#   for(i in 1:length(citrus.clustering$clusterMembership)){
+#     #if we find the cluster listed for the event, we asign the index of the event to the cluster
+#    
+#     if(eachcluster %in% citrus.clustering$clusterMembership[i][[1]]){
+# 
+#       eventlist = c(eventlist,i)
+#       print(eventlist)
+#     }
+#     
+#   }
+#   datafordiff[j] = eventlist
+#   j = j +1
+# }
+
+
+y = matrix(data=c(largeEnoughClusters1,), nrow=largeEnoughClusters1, ncol=8)
+ 
+
+
+grp <- rep(0:1,each=nSamples/2)
+
+
+
+
+
+#later get the cluster where the most sig feature is 
+# Features to highlight
+featureClusterMatrix = data.frame(cluster=c(19992,19978,19981,19987,19983,19973),feature=rep(c("Property 1","Property 2"),each=3))
+
+# Plot features in clustering hierarchy
+citrus.plotHierarchicalClusterFeatureGroups(outputFile="./output/testfeat.pdf",featureClusterMatrix,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
+
 ```
 ```{r}
 ```
