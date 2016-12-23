@@ -16,7 +16,6 @@ library(jpeg)
 
 load(file="/home/hannes/Dropbox/ETH/sta426/prj/img_23121000")
 
-img_hiplot = readJPEG("/home/hannes/Dropbox/ETH/sta426/prj/output/clusterhierarchy.jpg")
 
 figs <- captioner(prefix="Figure")
 tbls <- captioner(prefix="Table")
@@ -30,6 +29,17 @@ capdataspread = tbls("dataspread")
 
 
 
+```
+```{r echo=FALSE}
+plot_jpeg = function(path, add=FALSE)
+{
+  require('jpeg')
+  jpg = readJPEG(path, native=T) # read the file
+  res = dim(jpg)[1:2] # get the resolution
+  if (!add) # initialize an empty plot area if add==FALSE
+    plot(1,1,xlim=c(1,res[1]),ylim=c(1,res[2]),asp=1,type='n',xaxs='i',yaxs='i',xaxt='n',yaxt='n',xlab='',ylab='',bty='n')
+  rasterImage(jpg,1,1,res[1],res[2])
+}
 ```
 ##Introduction
 Single cell measurements have a clear advantage over whole population measurements. In whole population measurements we measure the average value of a parameter over the total population in our sample. To answer questions that involve the study of specific subpopulation of cells this is not very helpful. With single cell measurements we are able to get values for each cell separately. Given single cell data from a sample we should be able to stratify the cells into its subpopulation and make some prediction towards a disease state, for example. 
@@ -151,7 +161,7 @@ colnames(clusterMedians) = clusteringColumns
 
 invisible(citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=15, theme = 'white',singlePDF=T,plotClusterIDs=F,scale=1))
 
-plot(img_hiplot)
+plot_jpeg("/home/hannes/Dropbox/ETH/sta426/prj/output/clusterhierarchy.jpg")
 ```
 
 
