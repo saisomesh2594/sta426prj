@@ -12,9 +12,11 @@ knitr::opts_knit$set(root.dir = "/home/hannes/Dropbox/ETH/sta426/prj")  # with s
 library(captioner)
 library(citrus)
 library(knitr)
+library(jpeg)
 
 load(file="/home/hannes/Dropbox/ETH/sta426/prj/img_23121000")
 
+img_hiplot = readJPEG("/home/hannes/Dropbox/ETH/sta426/prj/output/clusterhierarchy.jpg")
 
 figs <- captioner(prefix="Figure")
 tbls <- captioner(prefix="Table")
@@ -114,6 +116,7 @@ for(j in 1:8){
 }
 
 ```
+
 ```{r,results='asis',fig.align='center',fig.cap=capbox}
 
  par(mfrow=c(5,2))
@@ -146,8 +149,14 @@ clusterMedians = t(sapply(largeEnoughClusters1,citrus:::.getClusterMedians,clust
 rownames(clusterMedians) = largeEnoughClusters1
 colnames(clusterMedians) = clusteringColumns
 
-citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=15, theme = 'white')
+invisible(citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=15, theme = 'white',singlePDF=T,plotClusterIDs=F,scale=1))
+
+plot(img_hiplot)
 ```
+
+
+
+
 ###Compare clustering with different subsamples
 ```{r eval=FALSE, echo=FALSE}
 citrus.combinedFCSSet_1 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
@@ -248,6 +257,7 @@ medianDifferenceFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
                                                 featureType="medians",
                                                 medianColumns=functionalColumns,
                                                 conditions=c("reference","bcr"))
+
 medianFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
                                                 clusterAssignments=citrus.clustering$clusterMembership,
                                                 clusterIds=largeEnoughClusters5,
