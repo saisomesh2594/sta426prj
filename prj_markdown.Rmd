@@ -2,15 +2,31 @@
 title: "prjsta426"
 author: "hwartmann"
 date: "November 30, 2016"
-output: html_document
+output:
+  html_document:
+    css: /home/hannes/Dropbox/ETH/sta426/prj/mystyle.css
+  pdf_document: default
 ---
 ```{r "setup", include=FALSE}
 knitr::opts_knit$set(root.dir = "/home/hannes/Dropbox/ETH/sta426/prj")  # with something else than `getwd()`
 library(captioner)
 library(citrus)
 library(knitr)
+
+load(file="/home/hannes/Dropbox/ETH/sta426/prj/img_23121000")
+
+
 figs <- captioner(prefix="Figure")
-figs(name="eventcount_files","Total number of events per file")
+tbls <- captioner(prefix="Table")
+
+figs("eventcount_files","Total number of events per file")
+capeventcount = figs("eventcount_files")
+figs("box","The same data is plotted here as in Figure XX. We picked a random patient and looked at the boxplots for the mean marker intensity of 100 trials.", display=FALSE)
+capbox = figs("box")
+tbls("dataspread","Each files was downsampled with 5000 samples for 1000 times. Each time the mean marker intensity for the extracellular markers was calculated. Here we show the mean of 1000 means ± s.d.. Patient 1 has s.d. zero because the files contain less than 5000 events.")
+capdataspread = tbls("dataspread")
+
+
 
 ```
 ##Introduction
@@ -18,6 +34,7 @@ Single cell measurements have a clear advantage over whole population measuremen
 The most common method to obtain single cell measurements is flow cytometry. For a long time fluorescent flow cytometry was very popular. With this method, in addition to physical properties such as shape, one can also measure the abundance of fluorescent markers within a cell. This technique limited by the spectral overlap, i.e. the overlap of the wavelength of the differently colored fluorescent used. This makes it very hard to distinguish a large number of parameters. In resent time flow cytometry has been coupled with mass spectrometry to allow the measurements of >40 inter and outer cellular parameters at the same time. Very briefly, in this method samples are incubated with antibodies carrying rare metals and are then vaporized in a time of flight mass spectrometer. The mass of the rare metals and their abundance is measured and replaced the fluorescent measurement of fluorescent flow cytometry.
 Bruggner et al. have proposed a new automated method to detect stratifying signatures in cellular sub populations. They named their method citrus and it's available as an R package. Citrus combines unsupervised and supervised learning to select end-point i.e. classification significant features. First a predefined number of samples is randomly selected from each patient and the data is combined. This data is then clustered using hierarchical clustering. From these clusters citrus tried to extract relevant per-sample features. These features, together with the known end-point status i.e. healthy or diseased are used to train a regularized regression model.
 Here in this project work we set out to explain the workings of citrus in more detail while following the same real world example that is used in the original paper. 
+
 ##Data
 Bodenmiller et al. created a data set with a newly proposed mass-tag cellular barcoding (MCB) method. This method allows for very high dimensional data acquired with mass cytometry. More specifically they set out to measure signaling dynamics and cell-to-cell communication in peripheral blood mononuclear cells (PBMC). To this end 12 different experimental conditions were set up and 14 signaling nodes and 10 cell-surface markers were measured at different time points from 0-4h. Here we focus on one of those conditions mainly the cross-linking of the B-cell receptor (BCR)/Fc receptor (FcR). The data consist of 16 samples of eight healthy donors, one reference and one treated sample per patient.
 ```{r }
@@ -31,37 +48,46 @@ fileList = data.frame(bcr=list.files(dataDirectory,pattern="BCR"),reference=list
 For each patient there is a different number of events in the FCS files. As figure XX shows the number of events ranges from about 3000 in patient 1 to about 17'000 in patient 2. To prevent over representation of any one sample and to reduce computation time Citrus samples a user specified number of events per patient and then merges the data for clustering. The function sample() from the R base package is used to select 5000 random data points from the FCS files, if available. As we have tried to reproduce the exact data obtained bei Bruggner et al we found that this is not possible. We suspect this to be the result of downsampling the date. To get an idea how different the subsamples really are we decided to subsample 5000 data points for each data file 1000 times and calculate the mean and variance of the mean of the intensity of the markers.
 
 
-```{r }
-
+```{r eval=FALSE}
 
 eventcount = vector(mode="integer", length=16)
 i = 1
 for(f in files){
   fcsfile = citrus.readFCS(file.path(dataDirectory,f))
+  print(dim(fcsfile))
   eventcount[i] = dim(fcsfile)[1]
   i = i +1
 }
+```
+```{r fig.align='center',fig.cap=capeventcount}
+par(mar=c(6,4,2,2)) #sets the bottom, left, top and right
 barplot(eventcount,main="Event distribution", 
   names.arg=c("p1 BCR-XL","p1 ref","p2 BCR-XL","p2 ref","p3 BCR-XL","p3 ref","p4 BCR-XL","p4 ref","p5 BCR-XL","p5 ref","p6 BCR-XL","p6 ref","p7 BCR-XL","p7 ref","p8 BCR-XL","p8 ref"),las=2)
 
-figs("eventcount_files",display="cite")
-
-data_analysis = matrix(data=NA, nrow=16, ncol=10)
-colnames(data_analysis) = c("CD3","CD45","CD4","CD20","CD33","CD123","CD14","igM","HLA-DR","CD7")
-rownames(data_analysis) = c("p1 BCR-XL","p1 Ref","p2 BCR-XL","p2 Ref","p3 BCR-XL","p3 Ref","p4 BCR-XL","p4 Ref","p5 BCR-XL","p5 Ref","p6 BCR-XL","p6 Ref","p7 BCR-XL","p7 Ref","p8 BCR-XL","p8 Ref")
+```
+```{r eval=FALSE}
 
 marker = c(3, 4, 9, 11, 12, 14, 21, 29, 31, 33)
+maker_names = c("CD3","CD45","CD4","CD20","CD33","CD123","CD14","igM","HLA-DR","CD7")
 
-avgintensity = matrix(data=NA, nrow=1000, ncol=10)
+data_analysis = matrix(data=NA, nrow=16, ncol=10)
+colnames(data_analysis) = maker_names
+rownames(data_analysis) = c("p1 BCR-XL","p1 Ref","p2 BCR-XL","p2 Ref","p3 BCR-XL","p3 Ref","p4 BCR-XL","p4 Ref","p5 BCR-XL","p5 Ref","p6 BCR-XL","p6 Ref","p7 BCR-XL","p7 Ref","p8 BCR-XL","p8 Ref")
 
-#loop all patients
+
+
+avgintensity = matrix(data=NA, nrow=100, ncol=10)
+colnames(avgintensity) = maker_names
+avgintensity_plot = matrix(data=NA, nrow=100, ncol=10)
+colnames(avgintensity_plot) = maker_names
+
 k = 1
 for(j in 1:8){
   #loop all bcr / ref, load files
     for(each in c("_BCR-XL.fcs","_Reference.fcs")){
       fcsfile = citrus.readFCS(file.path(dataDirectory,paste0("PBMC8_30min_patient",j,each)))
       #subsamples 1000 times
-      for(i in 1:1000){
+      for(i in 1:100){
         #if not patient 1, sample 5k, p1 has only ca. 3k samples
         if(j != 1){
           sample_fcsfile = fcsfile[sort(sample(1:nrow(fcsfile),5000)),] #1:numberofrowsin(fcsfile)
@@ -69,10 +95,16 @@ for(j in 1:8){
           sample_fcsfile = fcsfile #1:numberofrowsin(fcsfile)
         }
         #loop each marker andstore mean
-        for(h in 1:10)
+        for(h in 1:10){
           #avgintensity is 1000x10 i.e. 1000 subsamples with each 10 means for 10 markers
           avgintensity[i,h] = mean(sample_fcsfile@exprs[,marker[h]])
+        }
       }
+       if(j == 2 && each == "_BCR-XL.fcs"){
+         avgintensity_plot = avgintensity
+        
+        
+       }
       for(p in 1:10){
        data_analysis[k,p] = paste0(signif(mean(avgintensity[,p]), digits = 2),"±",signif(var(avgintensity[,p]), digits = 2))
       }
@@ -81,30 +113,43 @@ for(j in 1:8){
     }
 }
 
+```
+```{r,results='asis',fig.align='center',fig.cap=capbox}
 
-kable(data_analysis)
+ par(mfrow=c(5,2))
+         par(mar=c(2,2,2,2))
+         par(las = 1) # all axis labels horizontal
+         for(x in 1:10){
+            boxplot(as.data.frame(avgintensity_plot[,x]), main = paste("Patient 2 BCR-XL",marker_names[x]),
+            horizontal = TRUE)
+         }
+```
+```{r,results='asis'}
 
+kable(data_analysis, caption = "Table1: Each files was downsampled with 5000 samples for 1000 times. Each time the mean marker intensity for the extracellular markers was calculated. Here we show the mean of 1000 means ± s.d.. Patient 1 has s.d. zero because the files contain less than 5000 events.",format = "html")
 ```
 
 ##Clustering of data by extracellular markers
 One popular method for unsupervised learning is clustering. In clustering one can apply different algorithms to detect structure within a given data set and can build features based on cluster membership. Citrus uses Rclusterpp.hclust() also created by Bruggner et al. This function is an implementation of the Agglomerative Hierarchical Clustering algorithm. In hierarchical clustering smaller clusters are merged into larger clusters following a given distance function and linkage method. In Citrus the distance between markers is specified by the Euclidean distance and Wards linkage used as the agglomerative method. Wards methods minimizes the total within cluster variance.  
 The Bodenmiller data is clustered by the intensity of the extracellular markers CD45,CD4,CD20,CD33,CD123,CD14,IgM,HLA-DR,CD7 and CD3. 
+```{r eval=FALSE}
+clusteringColumns = c("CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd","CD3(110:114)Dd")
+citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns,clusteringType = "hierarchical")
+```
+```{r eval=FALSE}
+largeEnoughClusters1= citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.01)
 
+hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
 
-add some scatter plots of markers from our most significant cluster
+clusterMedians = t(sapply(largeEnoughClusters1,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
 
+rownames(clusterMedians) = largeEnoughClusters1
+colnames(clusterMedians) = clusteringColumns
 
-
-do clustering
-generate feature
-evaluate feature with model
-select top feature / top most significan cluster
-plot: top features like in Fig2B of paper
-plot: corss val of model with threshold selection Fig
-plot: hierarchy plot of 
-
+citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=15, theme = 'white')
+```
 ###Compare clustering with different subsamples
-```{r}
+```{r eval=FALSE, echo=FALSE}
 citrus.combinedFCSSet_1 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
 citrus.clustering_1 = citrus.cluster(citrus.combinedFCSSet_1,clusteringColumns,clusteringType = "hierarchical")
 citrus.combinedFCSSet_2 = citrus.readFCSSet(dataDirectory,fileList, fileSampleSize = 5000)
@@ -188,25 +233,9 @@ barplot(,main="Event distribution",
 
 ```
 
-```{r}
-clusteringColumns = c("CD45(In115)Dd","CD4(Nd145)Dd","CD20(Sm147)Dd","CD33(Nd148)Dd","CD123(Eu151)Dd","CD14(Gd160)Dd","IgM(Yb171)Dd","HLA-DR(Yb174)Dd","CD7(Yb176)Dd","CD3(110:114)Dd")
 
-#citrus.clustering uses Rclusterpp.hclust()
-citrus.clustering = citrus.cluster(citrus.combinedFCSSet,clusteringColumns,clusteringType = "hierarchical")
-
-#labels = factor(rep(c("bcr","ref"),each=8))
-
-#citrus.clustering = citrus.clusterAndMapFolds(citrus.combinedFCSSet,clusteringColumns,labels,nFolds=4)
-
-#citrus.plotClusters(clusterIds=c(19998,19997),clusterAssignments=citrus.clustering$clusterMembership,citrus.combinedFCSSet,clusteringColumns)
-length(citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.05))
-
-
-
-
-```
 ##features
-```{r}
+```{r eval=FALSE, echo=FALSE}
 # Vector of parameters to calculate medians for
 functionalColumns = c("pNFkB(Nd142)Dd", "pp38(Nd144)Dd", "pStat5(Nd150)Dd", "pAkt(Sm152)Dd", "pStat1(Eu153)Dd", "pSHP2(Sm154)Dd", "pZap70(Gd156)Dd", "pStat3(Gd158)Dd", "pSlp76(Dy164)Dd", "pBtk(Er166)Dd", "pPlcg2(Er167)Dd", "pErk(Er168)Dd","pLat(Er170)Dd", "pS6(Yb172)Dd")
 
@@ -228,7 +257,7 @@ medianFeatures = citrus.calculateFeatures(citrus.combinedFCSSet,
 
 ```
 ##Plotting hierarchycal Graphs + differential features
-```{r}
+```{r eval=FALSE, echo=FALSE}
 largeEnoughClusters1= citrus.selectClusters.minimumClusterSize(citrus.clustering,minimumClusterSizePercent=0.01)
 
 hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
