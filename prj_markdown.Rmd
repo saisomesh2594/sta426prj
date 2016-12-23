@@ -262,12 +262,20 @@ largeEnoughClusters1= citrus.selectClusters.minimumClusterSize(citrus.clustering
 
 hierarchyGraph = citrus.createHierarchyGraph(citrus.clustering,selectedClusters=largeEnoughClusters1)
 
-clusterMedians = t(sapply(largeEnoughClusters1,citrus:::.getClusterMedians,clusterAssignments=citrus.clustering$clusterMembership,data=citrus.combinedFCSSet$data,clusterCols=clusteringColumns))
+clusterMedians = t(sapply(largeEnoughClusters1,
+                          citrus:::.getClusterMedians,
+                          clusterAssignments=citrus.clustering$clusterMembership,
+                          data=citrus.combinedFCSSet$data,
+                          clusterCols=clusteringColumns))
 
 rownames(clusterMedians) = largeEnoughClusters1
 colnames(clusterMedians) = clusteringColumns
 
-citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",clusterColors=clusterMedians,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
+citrus.plotClusteringHierarchy(outputFile="./output/clusterhierarchy.pdf",
+                               clusterColors=clusterMedians, 
+                               graph=hierarchyGraph$graph,
+                               layout=hierarchyGraph$layout,
+                               plotSize=hierarchyGraph$plotSize)
 
 ##plot featurs highlated in hierarchygraph
 
@@ -332,12 +340,19 @@ grp <- rep(0:1,each=nSamples/2)
 featureClusterMatrix = data.frame(cluster=c(19992,19978,19981,19987,19983,19973),feature=rep(c("Property 1","Property 2"),each=3))
 
 # Plot features in clustering hierarchy
-citrus.plotHierarchicalClusterFeatureGroups(outputFile="./output/testfeat.pdf",featureClusterMatrix,graph=hierarchyGraph$graph,layout=hierarchyGraph$layout,plotSize=hierarchyGraph$plotSize)
+citrus.plotHierarchicalClusterFeatureGroups(outputFile="./output/testfeat.pdf",
+                                              featureClusterMatrix,
+                                              graph=hierarchyGraph$graph,
+                                              layout=hierarchyGraph$layout,
+                                              plotSize=hierarchyGraph$plotSize)
 ```
 
 #calculate regularization thresholds
 ```{r}
-regularizationThresholds = citrus.generateRegularizationThresholds(medianFeatures,labels,modelType="pamr", family="classification")
+regularizationThresholds = citrus.generateRegularizationThresholds(medianFeatures,
+                                                                    labels,
+                                                                    modelType="pamr", 
+                                                                    family="classification")
 ```
 
 #calculate cv error rates
@@ -356,7 +371,11 @@ cvMinima = citrus.getCVMinima("pamr",thresholdCVRates, fdrRate = 0.01)
 
 #Build final model
 ```{r}
-finalModel = citrus.buildEndpointModel(medianFeatures,labels,family="classification",type="pamr",regularizationThresholds)
+finalModel = citrus.buildEndpointModel(medianFeatures,
+                                        labels, 
+                                        family="classification",
+                                        type="pamr",
+                                        regularizationThresholds)
 
 #endpointModel = citrus.buildEndpointModel(abundanceFeatures,labels)
 ```
